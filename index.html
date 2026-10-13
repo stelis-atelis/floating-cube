@@ -156,22 +156,41 @@
       particleGeometry, particleMaterial
     );
     scene.add(particleField);
-
+   
     // Dragging and rotational momentum
     let dragging = false;
     let previousX = 0;
     let previousY = 0;
-    let velocityX = 0;
-    let velocityY = 0;
+    let velocityYaw = 0;
+    let velocityPitch = 0;
     let lastInteraction = performance.now();
+
+    // Rotate relative to the camera's screen directions
+    function rotateCube(yaw, pitch) {
+      const cameraUp = new THREE.Vector3(0, 1, 0)
+        .applyQuaternion(camera.quaternion);
+
+      const cameraRight = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(camera.quaternion);
+
+      const yawRotation = new THREE.Quaternion()
+        .setFromAxisAngle(cameraUp, yaw);
+
+      const pitchRotation = new THREE.Quaternion()
+        .setFromAxisAngle(cameraRight, pitch);
+
+      cube.quaternion.premultiply(yawRotation);
+      cube.quaternion.premultiply(pitchRotation);
+    }
 
     renderer.domElement.addEventListener('pointerdown', event => {
       dragging = true;
       previousX = event.clientX;
       previousY = event.clientY;
-      velocityX = 0;
-      velocityY = 0;
+      velocityYaw = 0;
+      velocityPitch = 0;
       lastInteraction = performance.now();
+
       renderer.domElement.setPointerCapture(event.pointerId);
     });
 
@@ -181,11 +200,10 @@
       const dx = event.clientX - previousX;
       const dy = event.clientY - previousY;
 
-      velocityY = dx * 0.006;
-      velocityX = dy * 0.006;
+      velocityYaw = dx * 0.006;
+      velocityPitch = dy * 0.006;
 
-      cube.rotation.y += velocityY;
-      cube.rotation.x += velocityX;
+      rotateCube(velocityYaw, velocityPitch);
 
       previousX = event.clientX;
       previousY = event.clientY;
@@ -210,19 +228,16 @@
       const delta = Math.min(clock.getDelta(), 0.05);
 
       // A gentle idle rotation, plus momentum after releasing
-      if (!dragging) {
+        if (!dragging) {
         if (performance.now() - lastInteraction > 1800) {
-          cube.rotation.y += 0.16 * delta;
-          cube.rotation.x += 0.035 * delta;
+          rotateCube(0.16 * delta, 0.035 * delta);
         } else {
-          cube.rotation.y += velocityY;
-          cube.rotation.x += velocityX;
+          rotateCube(velocityYaw, velocityPitch);
         }
 
-        velocityX *= 0.96;
-        velocityY *= 0.96;
+        velocityYaw *= 0.96;
+        velocityPitch *= 0.96;
       }
-
       // Particles flow along broad, curved paths
       const positions = particleGeometry.attributes.position.array;
 
