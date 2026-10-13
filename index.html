@@ -100,7 +100,7 @@
     );
 
     const cube = new THREE.Mesh(cubeGeometry, cubeMaterials);
-    cube.scale.setScalar(1.8);
+    cube.scale.setScalar(2.1);
     scene.add(cube);
 
     // Very subtle edges to keep the geometry crisp
@@ -115,7 +115,7 @@
     cube.add(edges);
 
     // Flowing dark particles
-    const particleCount = 650;
+    const particleCount = 1800;
     const positions = new Float32Array(particleCount * 3);
     const particles = [];
 
@@ -163,7 +163,7 @@
       size: 0.012,
       map: particleTexture,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.9,
       alphaTest: 0.1,
       sizeAttenuation: true,
       depthWrite: false
