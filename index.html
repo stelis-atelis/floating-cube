@@ -2,9 +2,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Floating Cube</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Playground</title>
+
   <style>
     * { box-sizing: border-box; }
 
@@ -13,15 +14,9 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      font-family: Arial, sans-serif;
       background: #dededb;
     }
-
-    body {
-      font-family: sans-serif;
-      cursor: grab;
-    }
-
-    body:active { cursor: grabbing; }
 
     canvas {
       display: block;
@@ -30,42 +25,85 @@
       touch-action: none;
     }
 
+    #navigation {
+      position: fixed;
+      z-index: 10;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px;
+      border: 1px solid rgba(40, 40, 40, 0.12);
+      border-radius: 30px;
+      background: rgba(250, 250, 248, 0.82);
+      backdrop-filter: blur(12px);
+    }
+
+    #navigation button {
+      border: 0;
+      border-radius: 24px;
+      padding: 10px 15px;
+      background: transparent;
+      color: #555550;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #navigation button.active {
+      background: #333330;
+      color: white;
+    }
+
     .hint {
       position: fixed;
-      bottom: 26px;
+      z-index: 5;
+      bottom: 25px;
       left: 0;
       width: 100%;
       text-align: center;
       color: #62625f;
       font-size: 11px;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       pointer-events: none;
       user-select: none;
     }
+
+    @media (max-width: 480px) {
+      #navigation { top: 12px; }
+      #navigation button {
+        padding: 9px 11px;
+        font-size: 11px;
+      }
+      .hint { bottom: 16px; font-size: 10px; }
+    }
   </style>
 </head>
+
 <body>
+  <nav id="navigation" aria-label="Choose a 3D scene">
+    <button class="active" data-scene="0">01 · Cube</button>
+    <button data-scene="1">02 · Folded Form</button>
+  </nav>
+
   <div class="hint">Click and drag to explore</div>
 
   <script type="module">
     import * as THREE from
       'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
-    // Scene and camera
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#dededb');
-    scene.fog = new THREE.Fog('#dededb', 9, 24);
-
-    const camera = new THREE.PerspectiveCamera(
-      45, window.innerWidth / window.innerHeight, 0.1, 100
-    );
-    camera.position.set(0, 0, 8);
+    // --------------------------------------------------
+    // SHARED RENDERER
+    // --------------------------------------------------
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: 'high-performance'
     });
+
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -73,132 +111,336 @@
     renderer.toneMappingExposure = 1.15;
     document.body.appendChild(renderer.domElement);
 
-    // Soft lighting
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x858580, 2.1));
+    // Each scene has its own world, camera, object and particles.
+    const scenes = [];
 
-    const light = new THREE.DirectionalLight(0xffffff, 3);
-    light.position.set(-3, 5, 7);
-    scene.add(light);
+    // --------------------------------------------------
+    // PARTICLE FIELD
+    // --------------------------------------------------
 
-    // The cube: one different colour per face
-    const cubeGeometry = new THREE.BoxGeometry(1.65, 1.65, 1.65);
-    const colors = [
-      '#e84b3c', // right
-      '#2c78d4', // left
-      '#f0c844', // top
-      '#35a86b', // bottom
-      '#f08a35', // front
-      '#9b69cc'  // back
-    ];
+    function createParticles(scene, count, color, spread) {
+      const positions = new Float32Array(count * 3);
+      const particles = [];
 
-    const cubeMaterials = colors.map(color =>
-      new THREE.MeshStandardMaterial({
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 2 + Math.random() * spread;
+        const y = (Math.random() - 0.5) * spread * 1.2;
+
+        particles.push({
+          angle,
+          radius,
+          y,
+          speed: 0.035 + Math.random() * 0.10,
+          phase: Math.random() * Math.PI * 2
+        });
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+      }
+
+      // Make a round particle texture.
+      const particleCanvas = document.createElement('canvas');
+      particleCanvas.width = 64;
+      particleCanvas.height = 64;
+
+      const context = particleCanvas.getContext('2d');
+      context.beginPath();
+      context.arc(32, 32, 28, 0, Math.PI * 2);
+      context.fillStyle = '#ffffff';
+      context.fill();
+
+      const texture = new THREE.CanvasTexture(particleCanvas);
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3)
+      );
+
+      const material = new THREE.PointsMaterial({
         color,
-        roughness: 0.72,
-        metalness: 0
-      })
-    );
-
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterials);
-    cube.scale.setScalar(2.1);
-    scene.add(cube);
-
-    // Very subtle edges to keep the geometry crisp
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(cubeGeometry),
-      new THREE.LineBasicMaterial({
-        color: 0x353535,
+        size: 0.018,
+        map: texture,
         transparent: true,
-        opacity: 0.22
-      })
-    );
-    cube.add(edges);
-
-    // Flowing dark particles
-    const particleCount = 4000;
-    const positions = new Float32Array(particleCount * 3);
-    const particles = [];
-
-    for (let i = 0; i < particleCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 2.0 + Math.random() * 7.5;
-      const y = (Math.random() - 0.5) * 9;
-
-      particles.push({
-        angle,
-        radius,
-        y,
-        speed: 0.035 + Math.random() * 0.10,
-        phase: Math.random() * Math.PI * 2,
-        size: 0.5 + Math.random() * 1.5
+        opacity: 0.7,
+        alphaTest: 0.1,
+        sizeAttenuation: true,
+        depthWrite: false
       });
 
-      positions[i * 3] = Math.cos(angle) * radius;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = Math.sin(angle) * radius;
+      const field = new THREE.Points(geometry, material);
+      scene.add(field);
+
+      return {
+        field,
+        geometry,
+        particles,
+        count
+      };
     }
 
-    const particleGeometry = new THREE.BufferGeometry();
-    particleGeometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(positions, 3)
+    // --------------------------------------------------
+    // SCENE 1: ORIGINAL-STYLE COLOURFUL CUBE
+    // --------------------------------------------------
+
+    function createCubeScene() {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#dededb');
+      scene.fog = new THREE.Fog('#dededb', 9, 24);
+
+      const camera = new THREE.PerspectiveCamera(
+        45,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      camera.position.set(0, 0, 8);
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x858580, 2.1));
+
+      const light = new THREE.DirectionalLight(0xffffff, 3);
+      light.position.set(-3, 5, 7);
+      scene.add(light);
+
+      const geometry = new THREE.BoxGeometry(1.65, 1.65, 1.65);
+
+      const colors = [
+        '#e84b3c',
+        '#2c78d4',
+        '#f0c844',
+        '#35a86b',
+        '#f08a35',
+        '#9b69cc'
+      ];
+
+      const materials = colors.map(color =>
+        new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.72,
+          metalness: 0
+        })
+      );
+
+      const object = new THREE.Mesh(geometry, materials);
+      scene.add(object);
+
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({
+          color: 0x353535,
+          transparent: true,
+          opacity: 0.22
+        })
+      );
+      object.add(edges);
+
+      const particleData = createParticles(
+        scene, 1800, 0x30302e, 7.5
+      );
+
+      return {
+        scene,
+        camera,
+        object,
+        particleData,
+        idleYaw: 0.16,
+        idlePitch: 0.035,
+        lastInteraction: performance.now()
+      };
+    }
+
+    // --------------------------------------------------
+    // SCENE 2: CUSTOM FOLDED GEOMETRIC FORM
+    // --------------------------------------------------
+
+    function createFoldedScene() {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#e7e5e0');
+      scene.fog = new THREE.Fog('#e7e5e0', 12, 30);
+
+      const camera = new THREE.PerspectiveCamera(
+        45,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      camera.position.set(0, 0, 9);
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.1));
+
+      const light = new THREE.DirectionalLight(0xffffff, 2.8);
+      light.position.set(-3, 5, 7);
+      scene.add(light);
+
+      // Vertex coordinates: [left/right, height, depth].
+      const vertices = [
+        [-2.5, -0.8,  0.7], // 0: front bottom left
+        [ 2.5, -0.8,  0.7], // 1: front bottom right
+        [ 2.5,  0.8,  0.7], // 2: front top right
+        [-2.5,  0.8,  0.7], // 3: front top left
+        [-2.5, -0.8, -0.7], // 4: rear bottom left
+        [ 2.5, -0.8, -0.7], // 5: rear bottom right
+        [ 2.5,  0.8, -0.7], // 6: rear top right
+        [-2.5,  0.8, -0.7], // 7: rear top left
+        [ 1.6,  1.55, -0.7] // 8: raised fold
+      ];
+
+      // Each polygon has its own material number.
+      const faces = [
+        { points: [0, 1, 2, 3], material: 0 }, // front
+        { points: [5, 4, 7, 6], material: 1 }, // rear
+        { points: [4, 0, 3, 7], material: 2 }, // left
+        { points: [1, 5, 6, 2], material: 3 }, // right
+        { points: [4, 5, 1, 0], material: 4 }, // bottom
+        { points: [7, 8, 3], material: 5 },    // fold panel
+        { points: [8, 2, 3], material: 6 },    // upper panel
+        { points: [7, 6, 8], material: 7 },    // rear fold
+        { points: [6, 2, 8], material: 8 }     // top fold
+      ];
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(vertices.flat(), 3)
+      );
+
+      const indices = [];
+      const groups = [];
+
+      for (const face of faces) {
+        const start = indices.length;
+        const p = face.points;
+
+        for (let i = 1; i < p.length - 1; i++) {
+          indices.push(p[0], p[i], p[i + 1]);
+        }
+
+        groups.push({
+          start,
+          count: indices.length - start,
+          material: face.material
+        });
+      }
+
+      geometry.setIndex(indices);
+
+      for (const group of groups) {
+        geometry.addGroup(
+          group.start,
+          group.count,
+          group.material
+        );
+      }
+
+      geometry.computeVertexNormals();
+
+      const colors = [
+        '#5968ad', // front blue
+        '#7657a8', // rear purple
+        '#35a86b', // left green
+        '#ed873b', // right orange
+        '#e8c94b', // bottom yellow
+        '#e84b3c', // fold red
+        '#5968ad', // upper blue
+        '#30302e', // rear dark grey
+        '#f08a35'  // upper orange
+      ];
+
+      const materials = colors.map(color =>
+        new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.8,
+          metalness: 0,
+          side: THREE.DoubleSide,
+          flatShading: true
+        })
+      );
+
+      const object = new THREE.Mesh(geometry, materials);
+      scene.add(object);
+
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry, 1),
+        new THREE.LineBasicMaterial({
+          color: 0x252525,
+          transparent: true,
+          opacity: 0.35
+        })
+      );
+      object.add(edges);
+
+      const particleData = createParticles(
+        scene, 1200, 0x35332f, 9
+      );
+
+      return {
+        scene,
+        camera,
+        object,
+        particleData,
+        idleYaw: 0.10,
+        idlePitch: 0.025,
+        lastInteraction: performance.now()
+      };
+    }
+
+    // Create both scenes without mixing their contents.
+    scenes.push(createCubeScene());
+    scenes.push(createFoldedScene());
+
+    // --------------------------------------------------
+    // SCENE NAVIGATION
+    // --------------------------------------------------
+
+    let activeSceneIndex = 0;
+
+    const navigationButtons = document.querySelectorAll(
+      '#navigation button'
     );
 
-   
-    // Create a small, circular particle texture
-    const particleCanvas = document.createElement('canvas');
-    particleCanvas.width = 64;
-    particleCanvas.height = 64;
+    function switchScene(index) {
+      activeSceneIndex = index;
 
-    const particleContext = particleCanvas.getContext('2d');
-    particleContext.beginPath();
-    particleContext.arc(32, 32, 28, 0, Math.PI * 2);
-    particleContext.fillStyle = '#ffffff';
-    particleContext.fill();
+      navigationButtons.forEach((button, i) => {
+        button.classList.toggle('active', i === index);
+      });
 
-    const particleTexture = new THREE.CanvasTexture(particleCanvas);
+      document.querySelector('.hint').textContent =
+        index === 0
+          ? 'Click and drag to explore'
+          : 'Click and drag to explore the folded form';
 
-    const particleMaterial = new THREE.PointsMaterial({
-      color: 0x30302e,
-      size: 0.05,
-      map: particleTexture,
-      transparent: true,
-      opacity: 0.9,
-      alphaTest: 0.1,
-      sizeAttenuation: true,
-      depthWrite: false
+      // Prevent the previous scene's drag momentum from carrying over.
+      scenes[index].lastInteraction = performance.now();
+    }
+
+    navigationButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        switchScene(Number(button.dataset.scene));
+      });
     });
 
+    // --------------------------------------------------
+    // DRAG ROTATION AND MOMENTUM
+    // --------------------------------------------------
 
-    const particleField = new THREE.Points(
-      particleGeometry, particleMaterial
-    );
-    scene.add(particleField);
-   
-    // Dragging and rotational momentum
     let dragging = false;
     let previousX = 0;
     let previousY = 0;
     let velocityYaw = 0;
     let velocityPitch = 0;
-    let lastInteraction = performance.now();
 
-    // Rotate relative to the camera's screen directions
-    function rotateCube(yaw, pitch) {
-      const cameraUp = new THREE.Vector3(0, 1, 0)
-        .applyQuaternion(camera.quaternion);
-
-      const cameraRight = new THREE.Vector3(1, 0, 0)
-        .applyQuaternion(camera.quaternion);
-
+    function rotateObject(object, yaw, pitch) {
       const yawRotation = new THREE.Quaternion()
-        .setFromAxisAngle(cameraUp, yaw);
+        .setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
 
       const pitchRotation = new THREE.Quaternion()
-        .setFromAxisAngle(cameraRight, pitch);
+        .setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch);
 
-      cube.quaternion.premultiply(yawRotation);
-      cube.quaternion.premultiply(pitchRotation);
+      object.quaternion.premultiply(yawRotation);
+      object.quaternion.premultiply(pitchRotation);
     }
 
     renderer.domElement.addEventListener('pointerdown', event => {
@@ -207,7 +449,8 @@
       previousY = event.clientY;
       velocityYaw = 0;
       velocityPitch = 0;
-      lastInteraction = performance.now();
+
+      scenes[activeSceneIndex].lastInteraction = performance.now();
 
       renderer.domElement.setPointerCapture(event.pointerId);
     });
@@ -221,70 +464,90 @@
       velocityYaw = dx * 0.006;
       velocityPitch = dy * 0.006;
 
-      rotateCube(velocityYaw, velocityPitch);
+      const object = scenes[activeSceneIndex].object;
+      rotateObject(object, velocityYaw, velocityPitch);
 
       previousX = event.clientX;
       previousY = event.clientY;
-      lastInteraction = performance.now();
+
+      scenes[activeSceneIndex].lastInteraction = performance.now();
     });
 
     function stopDragging() {
       dragging = false;
-      lastInteraction = performance.now();
     }
 
     renderer.domElement.addEventListener('pointerup', stopDragging);
     renderer.domElement.addEventListener('pointercancel', stopDragging);
 
-    // Animation
+    // --------------------------------------------------
+    // ANIMATION
+    // --------------------------------------------------
+
     const clock = new THREE.Clock();
 
     function animate() {
       requestAnimationFrame(animate);
 
-      const time = clock.getElapsedTime();
       const delta = Math.min(clock.getDelta(), 0.05);
+      const time = clock.elapsedTime;
 
-      // A gentle idle rotation, plus momentum after releasing
-        if (!dragging) {
-        if (performance.now() - lastInteraction > 1800) {
-          rotateCube(0.16 * delta, 0.035 * delta);
+      // Animate both particle fields, but render only the selected scene.
+      for (const state of scenes) {
+        const data = state.particleData;
+        const positions = data.geometry.attributes.position.array;
+
+        for (let i = 0; i < data.count; i++) {
+          const p = data.particles[i];
+          p.angle += p.speed * delta;
+
+          positions[i * 3] = Math.cos(p.angle) * p.radius;
+          positions[i * 3 + 1] =
+            p.y + Math.sin(time * 0.28 + p.phase) * 0.32;
+          positions[i * 3 + 2] = Math.sin(p.angle) * p.radius;
+        }
+
+        data.geometry.attributes.position.needsUpdate = true;
+        data.field.rotation.y = Math.sin(time * 0.07) * 0.12;
+      }
+
+      const active = scenes[activeSceneIndex];
+
+      if (!dragging) {
+        if (performance.now() - active.lastInteraction > 1800) {
+          rotateObject(
+            active.object,
+            active.idleYaw * delta,
+            active.idlePitch * delta
+          );
         } else {
-          rotateCube(velocityYaw, velocityPitch);
+          rotateObject(
+            active.object,
+            velocityYaw,
+            velocityPitch
+          );
         }
 
         velocityYaw *= 0.96;
         velocityPitch *= 0.96;
       }
-      // Particles flow along broad, curved paths
-      const positions = particleGeometry.attributes.position.array;
 
-      for (let i = 0; i < particleCount; i++) {
-        const p = particles[i];
-        p.angle += p.speed * delta;
-
-        positions[i * 3] =
-          Math.cos(p.angle) * p.radius;
-
-        positions[i * 3 + 1] =
-          p.y + Math.sin(time * 0.28 + p.phase) * 0.32;
-
-        positions[i * 3 + 2] =
-          Math.sin(p.angle) * p.radius;
-      }
-
-      particleGeometry.attributes.position.needsUpdate = true;
-      particleField.rotation.y = Math.sin(time * 0.07) * 0.12;
-
-      renderer.render(scene, camera);
+      renderer.render(active.scene, active.camera);
     }
 
     animate();
 
-    // Adapt to window size and device orientation
+    // --------------------------------------------------
+    // RESPONSIVE RESIZING
+    // --------------------------------------------------
+
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
+      for (const state of scenes) {
+        state.camera.aspect =
+          window.innerWidth / window.innerHeight;
+        state.camera.updateProjectionMatrix();
+      }
+
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     });
