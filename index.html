@@ -255,6 +255,7 @@
     // SCENE 2: CUSTOM FOLDED GEOMETRIC FORM
     // --------------------------------------------------
 
+    
     function createFoldedScene() {
       const scene = new THREE.Scene();
       scene.background = new THREE.Color('#e7e5e0');
@@ -274,93 +275,74 @@
       light.position.set(-3, 5, 7);
       scene.add(light);
 
-      // Vertex coordinates: [left/right, height, depth].
-      const vertices = [
-        [-2.5, -0.8,  0.7], // 0: front bottom left
-        [ 2.5, -0.8,  0.7], // 1: front bottom right
-        [ 2.5,  0.8,  0.7], // 2: front top right
-        [-2.5,  0.8,  0.7], // 3: front top left
-        [-2.5, -0.8, -0.7], // 4: rear bottom left
-        [ 2.5, -0.8, -0.7], // 5: rear bottom right
-        [ 2.5,  0.8, -0.7], // 6: rear top right
-        [-2.5,  0.8, -0.7], // 7: rear top left
-        [ 1.6,  1.55, -0.7] // 8: raised fold
+      // ------------------------------------------------
+      // 1. DEFINE THE 2D PROFILE
+      // ------------------------------------------------
+      // Coordinates are [horizontal, vertical].
+      // The triangular notch is part of the outline.
+      //
+      // Move these points to refine the silhouette.
+
+      const profilePoints = [
+        [-2.5, -0.8],  // 0: bottom left
+        [ 2.5, -0.8],  // 1: bottom right
+        [ 2.5,  0.25], // 2: upper right of body
+        [-1.4,  0.25], // 3: inner corner of notch
+        [ 2.5,  1.05], // 4: far tip of upper section
+        [-2.5,  1.05]  // 5: top left
       ];
 
-      // Each polygon has its own material number.
-      const faces = [
-        { points: [0, 1, 2, 3], material: 0 }, // front
-        { points: [5, 4, 7, 6], material: 1 }, // rear
-        { points: [4, 0, 3, 7], material: 2 }, // left
-        { points: [1, 5, 6, 2], material: 3 }, // right
-        { points: [4, 5, 1, 0], material: 4 }, // bottom
-        { points: [7, 8, 3], material: 5 },    // fold panel
-        { points: [8, 2, 3], material: 6 },    // upper panel
-        { points: [7, 6, 8], material: 7 },    // rear fold
-        { points: [6, 2, 8], material: 8 }     // top fold
-      ];
+      const shape = new THREE.Shape();
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(vertices.flat(), 3)
-      );
+      shape.moveTo(profilePoints[0][0], profilePoints[0][1]);
 
-      const indices = [];
-      const groups = [];
-
-      for (const face of faces) {
-        const start = indices.length;
-        const p = face.points;
-
-        for (let i = 1; i < p.length - 1; i++) {
-          indices.push(p[0], p[i], p[i + 1]);
-        }
-
-        groups.push({
-          start,
-          count: indices.length - start,
-          material: face.material
-        });
+      for (let i = 1; i < profilePoints.length; i++) {
+        shape.lineTo(profilePoints[i][0], profilePoints[i][1]);
       }
 
-      geometry.setIndex(indices);
+      shape.closePath();
 
-      for (const group of groups) {
-        geometry.addGroup(
-          group.start,
-          group.count,
-          group.material
-        );
-      }
+      // ------------------------------------------------
+      // 2. EXTRUDE THE PROFILE INTO A 3D SOLID
+      // ------------------------------------------------
 
+      const depth = 1.2;
+
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth,
+        bevelEnabled: false,
+        curveSegments: 1
+      });
+
+      // Centre the extrusion around the origin.
+      geometry.translate(0, 0, -depth / 2);
       geometry.computeVertexNormals();
 
-      const colors = [
-        '#5968ad', // front blue
-        '#7657a8', // rear purple
-        '#35a86b', // left green
-        '#ed873b', // right orange
-        '#e8c94b', // bottom yellow
-        '#e84b3c', // fold red
-        '#5968ad', // upper blue
-        '#30302e', // rear dark grey
-        '#f08a35'  // upper orange
-      ];
+      // ------------------------------------------------
+      // 3. COLOUR THE FRONT, BACK AND SIDE FACES
+      // ------------------------------------------------
 
-      const materials = colors.map(color =>
+      const materials = [
         new THREE.MeshStandardMaterial({
-          color,
+          color: '#657fbd', // Front and rear
+          roughness: 0.8,
+          metalness: 0,
+          side: THREE.DoubleSide,
+          flatShading: true
+        }),
+        new THREE.MeshStandardMaterial({
+          color: '#30302e', // Extruded side walls
           roughness: 0.8,
           metalness: 0,
           side: THREE.DoubleSide,
           flatShading: true
         })
-      );
+      ];
 
       const object = new THREE.Mesh(geometry, materials);
       scene.add(object);
 
+      // Draw sharp edges around the profile and extrusion.
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry, 1),
         new THREE.LineBasicMaterial({
@@ -369,8 +351,10 @@
           opacity: 0.35
         })
       );
+
       object.add(edges);
 
+      // Independent atmosphere for Scene 2.
       const particleData = createParticles(
         scene, 1200, 0x35332f, 9
       );
@@ -385,6 +369,7 @@
         lastInteraction: performance.now()
       };
     }
+
 
     // Create both scenes without mixing their contents.
     scenes.push(createCubeScene());
