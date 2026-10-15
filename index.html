@@ -219,11 +219,12 @@
         new THREE.MeshStandardMaterial({
           color,
           roughness: 0.72,
-          metalness: 0
+          metalness: 0.5
         })
       );
 
       const object = new THREE.Mesh(geometry, materials);
+      object.scale.setScalar(2.1); // Change cube size here
       scene.add(object);
 
       const edges = new THREE.LineSegments(
@@ -324,14 +325,14 @@
 
       const materials = [
         new THREE.MeshStandardMaterial({
-          color: '#657fbd', // Front and rear
+          color: '#52DA54', // Front and rear
           roughness: 0.8,
           metalness: 0,
           side: THREE.DoubleSide,
           flatShading: true
         }),
         new THREE.MeshStandardMaterial({
-          color: '#30302e', // Extruded side walls
+          color: '#71195E', // Extruded side walls
           roughness: 0.8,
           metalness: 0,
           side: THREE.DoubleSide,
